@@ -1,0 +1,30 @@
+{
+    "name": "nr-string-render",
+    "version": "0.0.1",
+    "description": "Generate string from template and data",
+    "main": "index.js",
+    "scripts": {
+        "test": "npm run build && mocha",
+        "tsc": "tsc",
+        "build": "node tools/pre-build.js && npm run tsc && node tools/copy.js",
+        "publish": "cd ./dist && npm publish"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nikolay-rogovoy/nr-string-render.git"
+    },
+    "author": "Nikolay Rogovoy",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/nikolay-rogovoy/nr-string-render/issues"
+    },
+    "homepage": "https://github.com/nikolay-rogovoy/nr-string-render#readme",
+    "devDependencies": {
+        "mocha": "^5.2.0",
+        "rimraf": "^2.6.2",
+        "typescript": "^2.9.2"
+    },
+    "dependencies": {
+        "nr-data-transtormer": "0.0.1"
+    }
+}
