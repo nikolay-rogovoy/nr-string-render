@@ -18,8 +18,9 @@ export class NrStringRender {
     renderReport(template: string, dataSources: IDataSource[]): string {
         // Сгруппировать
         dataSources.push(...this.getGroupByDataSources(template, dataSources));
+        template = this.removeGroupByFromTemplate(template);
         for (let dataSource of dataSources) {
-            template = this.renderReportRec(dataSource, template);
+            template = this.renderDataSourceRec(dataSource.name, dataSource.data, template);
             template = this.replaceParam(dataSource.param, template);
         }
         return template;
@@ -36,13 +37,13 @@ export class NrStringRender {
     }
 
     /***/
-    getGroupByDataSources(template: string, dataSources: any[]): any[] {
-        let grouppedDataSource = [];
+    getGroupByDataSources(template: string, dataSources: IDataSource[]): IDataSource[] {
+        let grouppedDataSource: IDataSource[] = [];
         for (let groupByObject of this.getGroupByObjects(template)) {
             for (let dataSource of dataSources) {
-                if (dataSource.dataSourceName === groupByObject.groupByCondition.dataSourceName) {
-                    let groupedDataSource = this.transformer.groupByTransformer(groupByObject.groupByCondition.groupFields, dataSource);
-                    grouppedDataSource.push({dataSourceName: groupByObject.name, dataSourceData: groupedDataSource});
+                if (dataSource.name === groupByObject.groupByCondition.dataSourceName) {
+                    let groupedDataSource = this.transformer.groupByTransformer(groupByObject.groupByCondition.groupFields, dataSource.data);
+                    grouppedDataSource.push({name: groupByObject.name, data: groupedDataSource, param: {}});
                 }
             }
         }
@@ -50,32 +51,36 @@ export class NrStringRender {
     }
 
     /**Генерация отчета для одного источника данных*/
-    renderReportRec(dataSourceName: string, dataSourceData: any[], template: string) {
+    renderDataSourceRec(dataSourceName: string, dataSourceData: any[], template: string) {
         let result = template;
+        for (let templatePart of this.getTemplatePart(dataSourceName, template)) {
+            let renderedDataSource = this.renderDataSource(dataSourceName, dataSourceData, this.removeDataSourceMarker(templatePart, dataSourceName));
+            result = result.replace(templatePart, renderedDataSource);
+        }
+        return result;
+    }
+
+    /***/
+    getTemplatePart(dataSourceName: string, template: string): string[] {
+        let result = [];
         // Ищем дата сурс в шаблоне
-        let regExpStr = `{{${dataSourceName}\\.loop}}[\\s\\w\\W]*?{{${dataSourceName}\\.endloop}}`;
+        let regExpStr = `{{${dataSourceName}\\.loop}}[\\s\\w\\W]*{{${dataSourceName}\\.endloop}}`;
         let regExp = new RegExp(regExpStr, 'gm');
-        if (dataSourceData.length > 0) {
-            // Есть записи, ищем шаблон
-            let regExpResult = template.match(regExp);
-            // Если в шаблоне есть итератор для сущности
-            if (regExpResult != null && regExpResult.length > 0) {
-                for (let templatePart of template.match(regExp)) {
-                    let renderedData = this.renderDataSource(dataSourceName, dataSourceData, this.removeDataSourceMarker(templatePart, dataSourceName));
-                    result = result.replace(new RegExp(regExpStr, 'm'), renderCanvasArr);
-                }
-            }// Нет шаблона
-        } else {
-            // Нет записей для сущности - генерить нечего
-            result = template.replace(regExp, '');
+        // Ищем шаблон
+        let regExpResult = template.match(regExp);
+        // Если в шаблоне есть итератор для сущности
+        if (regExpResult != null && regExpResult.length > 0) {
+            for (let templatePart of template.match(regExp)) {
+                result.push(templatePart);
+            }
         }
         return result;
     }
 
     /**Убираем из шаблона указатели на источник данных*/
     removeDataSourceMarker(templatePart: string, dataSourceName: string): string {
-        let iterateItemClear = templatePart.replace(new RegExp(`^{{${dataSourceName}\\.loop}}`, 'gm'), '');
-        iterateItemClear = iterateItemClear.replace(new RegExp(`{{${dataSourceName}\\.endloop}}$`, 'gm'), '');
+        let iterateItemClear = templatePart.replace(new RegExp(`^{{${dataSourceName}\\.loop}}`, 'g'), '');
+        iterateItemClear = iterateItemClear.replace(new RegExp(`{{${dataSourceName}\\.endloop}}$`, 'g'), '');
         return iterateItemClear;
     }
 
@@ -83,12 +88,13 @@ export class NrStringRender {
     renderDataSource(dataSourceName: string, dataSourceData: any[], template: string) {
         let renderedTemplates = '';
         for (let obj of dataSourceData) {
-            // Провести интерполяцию :)
+            let renderRow = template;
+            // Провести интерполяцию
             for (let prop in obj) {
                 if (obj.hasOwnProperty(prop)) {
                     if (Array.isArray(obj[prop])) {
                         // Рекурсия дальше
-                        template = this.renderReportRec(prop, obj[prop], template);
+                        renderRow = this.renderDataSourceRec(prop, obj[prop], renderRow);
                     } else {
                         let allProps = [prop];
                         if (obj[prop] != null && typeof obj[prop] === 'object') {
@@ -101,14 +107,14 @@ export class NrStringRender {
                             }
                             // Регулярное выражение поиска полей интерполяции
                             let fieldName = `${dataSourceName}\\.${propItem}`;
-                            template = this.replaceValueOnTemplate(fieldName, template, valuetToReplace);
+                            renderRow = this.replaceValueOnTemplate(fieldName, renderRow, valuetToReplace);
                         }
                     }
                 }
             }
             // Удалить все не интерполированные поля
-            template = template.replace(/{{[\s\w\W]+?}}/g, '');
-            renderedTemplates += template;
+            renderRow = renderRow.replace(/{{[\s\w\W]+?}}/g, '');
+            renderedTemplates += renderRow;
         }
         return renderedTemplates;
     }
@@ -153,19 +159,27 @@ export class NrStringRender {
 
     /***/
     getGroupByObjects(template: string): IGroupByObject[] {
-        let regExpGroup = /{{([\wа-яёА-ЯЁ]+)\s*=\s*groupBy[ ]*\(([\w\s,а-яёА-ЯЁ'"[\]]+)\)}}/g;
+        let regExpGroup = /{{([\n\wа-яёА-ЯЁ]+)\s*=\s*groupBy[ ]*\(([\n\w\s.,а-яёА-ЯЁ'"[\]]+)\)}}/g;
         let result: IGroupByObject[] = [];
         let regExpResult;
         while (regExpResult = regExpGroup.exec(template)) {
             let groupByCondition = this.getGroupByCondition(regExpResult[2]);
-            result.push({name: regExpResult[1], groupByCondition});
+            result.push({name: regExpResult[1], groupByCondition, fullCondition: regExpResult[0]});
         }
         return result;
     }
 
     /***/
+    removeGroupByFromTemplate(template: string) {
+        for(let groupByObject of this.getGroupByObjects(template)) {
+            template = template.replace(groupByObject.fullCondition, '');
+        }
+        return template;
+    }
+
+    /***/
     getGroupByCondition(groupByCondition: string): IGroupByCondition {
-        let regExp = /^([\w\sа-яёА-ЯЁ]+),\[([\w\s,а-яёА-ЯЁ'"]+)\]$/g;
+        let regExp = /^([\n\w\sа-яёА-ЯЁ]+),\[([\n\w\s.,а-яёА-ЯЁ'"]+)\]$/g;
         let result = [];
         let regExpResult;
         while (regExpResult = regExp.exec(groupByCondition)) {

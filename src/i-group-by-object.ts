@@ -6,4 +6,6 @@ export interface IGroupByObject {
     name: string;
     /***/
     groupByCondition: IGroupByCondition;
+    /***/
+    fullCondition: string;
 }

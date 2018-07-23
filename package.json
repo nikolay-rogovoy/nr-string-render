@@ -5,6 +5,7 @@
     "main": "index.js",
     "scripts": {
         "test": "npm run build && mocha",
+        "debug": "npm run build && node --inspect-brk dist/debug.js",
         "tsc": "tsc",
         "build": "node tools/pre-build.js && npm run tsc && node tools/copy.js",
         "publish": "cd ./dist && npm publish"
