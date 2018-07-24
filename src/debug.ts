@@ -4,29 +4,29 @@ import {NrStringRender} from "./nr-string-render";
 ((() => {
 
     let template = `
-{{Рг=groupBy(dataSource1,['dtdoc', 'detail.name'])}}
+{{Pr=groupBy(dataSource1,['dtdoc', 'detail.name'])}}
 
-{{Рг.loop}}
-	dtdoc = {{Рг.value|date}}
+{{Pr.loop.sort('value')}}
+	dtdoc = {{Pr.value|date}}
     {{items.loop}}
         detail = {{items.value}}
         {{items.loop}}        
             name = {{items.name}}; detail = {{items.detail.name}}
         {{items.endloop}}
     {{items.endloop}}
-{{Рг.endloop}}
+{{Pr.endloop}}
 
 `;
     let dataSourceData = [
         {
-            'dtdoc': '2018-05-18T05:00:00.000Z',
+            'dtdoc': '2018-05-18T05:00:02.000Z',
             'name': 'q1',
             'detail': {
                 'name': 'qwe1'
             }
         },
         {
-            'dtdoc': '2018-05-18T05:00:00.000Z',
+            'dtdoc': '2018-05-18T05:00:02.000Z',
             'name': 'q2',
             'detail': {
                 'name': 'qwe2'

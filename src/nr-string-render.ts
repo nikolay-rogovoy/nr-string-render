@@ -3,6 +3,9 @@ import {NrDataTransformer} from "nr-data-transtormer";
 import {IGroupByObject} from "./i-group-by-object";
 import {IGroupByCondition} from "./i-group-by-condition";
 import {IDataSource} from "./i-data-source";
+import {ITemplatePart} from "./i-template-part";
+import {ISortField} from "./i-sort-field";
+import {SortDirection} from "./sort-direction";
 
 export class NrStringRender {
 
@@ -54,32 +57,81 @@ export class NrStringRender {
     renderDataSourceRec(dataSourceName: string, dataSourceData: any[], template: string) {
         let result = template;
         for (let templatePart of this.getTemplatePart(dataSourceName, template)) {
-            let renderedDataSource = this.renderDataSource(dataSourceName, dataSourceData, this.removeDataSourceMarker(templatePart, dataSourceName));
-            result = result.replace(templatePart, renderedDataSource);
+            this.sortDataSourceData(dataSourceData, templatePart.sort);
+            let renderedDataSource = this.renderDataSource(dataSourceName, dataSourceData,
+                this.removeDataSourceMarker(templatePart.template, dataSourceName));
+            result = result.replace(templatePart.template, renderedDataSource);
         }
         return result;
     }
 
     /***/
-    getTemplatePart(dataSourceName: string, template: string): string[] {
-        let result = [];
+    sortDataSourceData(dataSourceData: any[], fields: ISortField[]): void {
+        if (fields.length) {
+            dataSourceData.sort((x, y) => {
+                let compareResult = 0;
+                fields.forEach((field, index) => {
+                    let valueX = this.extractDataFromObject(x, field.name);
+                    let valueY = this.extractDataFromObject(y, field.name);
+                    if (valueX !== valueY || index === fields.length - 1) {
+                        if (valueX > valueY) {
+                            compareResult = 1;
+                        } else if (valueX < valueY) {
+                            compareResult = -1;
+                        } else {
+                            compareResult = 0;
+                        }
+                    }
+                    if (field.sortDiraction === SortDirection.desc) {
+                        compareResult *= -1;
+                    }
+                });
+                return compareResult;
+            });
+        }
+    }
+
+    /***/
+    getTemplatePart(dataSourceName: string, template: string): ITemplatePart[] {
+        let result: ITemplatePart[] = [];
         // Ищем дата сурс в шаблоне
-        let regExpStr = `{{${dataSourceName}\\.loop}}[\\s\\w\\W]*{{${dataSourceName}\\.endloop}}`;
+        let regExpStr = `{{${dataSourceName}\\.loop(\\.sort\\([\\w\\n'.,\\s|]+\\))?}}[\\s\\w\\W]*{{${dataSourceName}\\.endloop}}`;
         let regExp = new RegExp(regExpStr, 'gm');
         // Ищем шаблон
         let regExpResult = template.match(regExp);
         // Если в шаблоне есть итератор для сущности
         if (regExpResult != null && regExpResult.length > 0) {
             for (let templatePart of template.match(regExp)) {
-                result.push(templatePart);
+                result.push(
+                    {template: templatePart, sort: this.getSortFields(template)}
+                );
             }
         }
         return result;
     }
 
+    /***/
+    getSortFields(template: string): ISortField[] {
+        let sortFields: ISortField[] = [];
+        let regExpFields = /loop\.sort\(('[\w\s\n,.'|"]+')+\)/g;
+        let regExpField = /'([\w\n.]+)(\|(desc))*'[\s,]?/g;
+        let sortFieldsStr;
+        let sortFieldStr;
+        while (sortFieldsStr = regExpFields.exec(template)) {
+            while (sortFieldStr = regExpField.exec(sortFieldsStr[1])) {
+                let sortDirection = SortDirection.ask;
+                if (sortFieldStr.length === 4 && sortFieldStr[3] === 'desc') {
+                    sortDirection = SortDirection.desc;
+                }
+                sortFields.push({name: sortFieldStr[1], sortDiraction: sortDirection});
+            }
+        }
+        return sortFields;
+    }
+
     /**Убираем из шаблона указатели на источник данных*/
     removeDataSourceMarker(templatePart: string, dataSourceName: string): string {
-        let iterateItemClear = templatePart.replace(new RegExp(`^{{${dataSourceName}\\.loop}}`, 'g'), '');
+        let iterateItemClear = templatePart.replace(new RegExp(`^{{${dataSourceName}\\.loop(\\.sort\\([\\w\\n'.,\\s|]+\\))?}}`, 'g'), '');
         iterateItemClear = iterateItemClear.replace(new RegExp(`{{${dataSourceName}\\.endloop}}$`, 'g'), '');
         return iterateItemClear;
     }
@@ -171,7 +223,7 @@ export class NrStringRender {
 
     /***/
     removeGroupByFromTemplate(template: string) {
-        for(let groupByObject of this.getGroupByObjects(template)) {
+        for (let groupByObject of this.getGroupByObjects(template)) {
             template = template.replace(groupByObject.fullCondition, '');
         }
         return template;
