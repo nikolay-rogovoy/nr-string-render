@@ -15,8 +15,14 @@ import {NrStringRender} from "./nr-string-render";
         {{items.endloop}}
     {{items.endloop}}
 {{Pr.endloop}}
-
+sum = {{sum(Pr.items.items.value)}}
 `;
+    /*
+{{sum(Pr.items.value)}}
+{{count(Pr.items.value)}}
+{{min(Pr.items.value)}}
+{{max(Pr.items.value)}}
+    * */
     let dataSourceData = [
         {
             'dtdoc': '2018-05-18T05:00:02.000Z',

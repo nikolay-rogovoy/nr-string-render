@@ -6,6 +6,7 @@ import {IDataSource} from "./i-data-source";
 import {ITemplatePart} from "./i-template-part";
 import {ISortField} from "./i-sort-field";
 import {SortDirection} from "./sort-direction";
+import {AggregateType} from "./aggregate-type";
 
 export class NrStringRender {
 
@@ -55,14 +56,103 @@ export class NrStringRender {
 
     /**Генерация отчета для одного источника данных*/
     renderDataSourceRec(dataSourceName: string, dataSourceData: any[], template: string) {
-        let result = template;
+        let renderedTemplate = this.calcAggregateDataSource(dataSourceName, dataSourceData, template);
         for (let templatePart of this.getTemplatePart(dataSourceName, template)) {
             this.sortDataSourceData(dataSourceData, templatePart.sort);
             let renderedDataSource = this.renderDataSource(dataSourceName, dataSourceData,
                 this.removeDataSourceMarker(templatePart.template, dataSourceName));
-            result = result.replace(templatePart.template, renderedDataSource);
+            renderedTemplate = renderedTemplate.replace(templatePart.template, renderedDataSource);
         }
-        return result;
+        return renderedTemplate;
+    }
+
+    /***/
+    calcAggregateDataSource(dataSourceName: string, dataSourceData: any[], template: string): string {
+        let regExpAgg = /{{(max)?(min)?(count)?(sum)?\(([\wа-яА-ЯёЁ]+)\.([.\wа-яА-ЯёЁ]+)\)}}/g;
+        let templateWithoutInnerLoop =  template.replace(/{{[,.\w\n\sа-яА-ЯёЁ'\|"]+\.loop[\(\),.\w\n\sа-яА-ЯёЁ'\|"]*}}[\w\W]*{{[,.\w\n\sа-яА-ЯёЁ'\|"]+\.endloop}}/g, '');
+        let expAgg;
+        let templateResult = template;
+        while (expAgg = regExpAgg.exec(templateWithoutInnerLoop)) {
+            let dataSourceNameAgg = expAgg[5];
+            if (dataSourceName === dataSourceNameAgg) {
+                let aggType = <AggregateType>(expAgg[1]||expAgg[2]||expAgg[3]||expAgg[4]);
+                let aggPath = expAgg[6].split('.');
+                let aggRes = this.calcAgg(dataSourceData, aggPath, aggType);
+                // Заменить агрегат
+                templateResult = templateResult.replace(expAgg[0], aggRes ? aggRes.toLocaleString() : '');
+            }
+        }
+        return templateResult;
+    }
+
+    /***/
+    calcAggObject(row: Object, path: string[], aggregateType: AggregateType) {
+        console.log(`calcAggObject ${path.join(',')}`);
+        if (path.length === 0) {
+            throw new Error('Ошибка вычисления агрегата, path.length === 0');
+        } else if (path.length === 1) {
+            if (row.hasOwnProperty(path[0])) {
+                return row[path[0]];
+            } else {
+                throw new Error(`В объекте ${JSON.stringify(row)} нет свойства ${path[0]}`);
+            }
+        } else {
+            let childPath = [...path];
+            let childProp = childPath.shift();
+            if (row.hasOwnProperty(childProp)) {
+                if (Array.isArray(row[childProp])) {
+                    // Вычеслить агрегат
+                    return this.calcAgg(row[childProp], childPath, aggregateType);
+                } else if (row[childProp] != null && typeof row[childProp] === 'object') {
+                    return this.calcAggObject(row[childProp], childPath, aggregateType);
+                } else {
+                    return null;
+                }
+            } else {
+                throw new Error(`В объекте ${JSON.stringify(row)} нет свойства ${path[0]}`);
+            }
+        }
+    }
+
+    /***/
+    calcAgg(rows: Object[], path: string[], aggregateType: AggregateType): number {
+        console.log(`calcAgg ${path.join(',')}`);
+        let aggResult = null;
+        for (let row of rows) {
+            let value = this.calcAggObject(row, path, aggregateType);
+            if (value) {
+                if (aggregateType === AggregateType.count) {
+                    if (aggResult) {
+                        aggResult++;
+                    } else {
+                        aggResult = 1;
+                    }
+                } else if (aggregateType === AggregateType.max) {
+                    if (aggResult) {
+                        if (aggResult > value) {
+                            aggResult = value;
+                        }
+                    } else {
+                        aggResult = value;
+                    }
+                } else if (aggregateType === AggregateType.min) {
+                    if (aggResult) {
+                        if (aggResult < value) {
+                            aggResult = value;
+                        }
+                    } else {
+                        aggResult = value;
+                    }
+                } else if (aggregateType === AggregateType.sum) {
+                    if (aggResult) {
+                        aggResult+=value;
+                    } else {
+                        aggResult = value;
+                    }
+                }
+            }
+        }
+        return aggResult;
     }
 
     /***/
