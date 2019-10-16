@@ -185,7 +185,7 @@ export class NrStringRender {
     getTemplatePart(dataSourceName: string, template: string): ITemplatePart[] {
         let result: ITemplatePart[] = [];
         // Ищем дата сурс в шаблоне
-        let regExpStr = `{{${dataSourceName}\\.loop(\\.sort\\([\\w\\n'.,\\s|]+\\))?}}[\\s\\w\\W]*{{${dataSourceName}\\.endloop}}`;
+        let regExpStr = `{{${dataSourceName}\\.loop(\\.sort\\([\\w\\n'.,\\s|]+\\))?}}[\\s\\w\\W]*?{{${dataSourceName}\\.endloop}}`;
         let regExp = new RegExp(regExpStr, 'gm');
         // Ищем шаблон
         let regExpResult = template.match(regExp);
@@ -193,7 +193,7 @@ export class NrStringRender {
         if (regExpResult != null && regExpResult.length > 0) {
             for (let templatePart of template.match(regExp)) {
                 result.push(
-                    {template: templatePart, sort: this.getSortFields(template)}
+                    {template: templatePart, sort: this.getSortFields(templatePart)}
                 );
             }
         }
